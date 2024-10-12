@@ -20,14 +20,14 @@ GNEWS_API_KEY = os.getenv('gnews_api_key')
 CURRENTS_API_KEY = os.getenv('currents_api_key') 
 
 # authenticate with twitter
-auth = tweepy.OAuthHandler(API_KEY,API_SECRET_KEY)
-auth.set_access_token(ACCESS_TOKEN,ACCESS_TOKEN_SECRET)
+auth = tweepy.OAuthHandler(API_KEY, API_SECRET_KEY)
+auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth)
 
-# function to get cybersecurity news from API
+# function to get cybersecurity news from NewsAPI
 def get_cyber_news_newsapi():
     # topics to be fetched from this API
-    topics = ['cybersecurity','databreach','malware','cyber attack']
+    topics = ['cybersecurity', 'databreach', 'malware', 'cyber attack']
     selected_topic = random.choice(topics)
 
     url = f'https://newsapi.org/v2/everything?q={selected_topic}&apiKey={NEWS_API_KEY}'
@@ -39,11 +39,11 @@ def get_cyber_news_newsapi():
         if news['articles']:
             title = news['articles'][0]['title']
             article_url = news['articles'][0]['url']
-            return title,article_url
+            return title, article_url
         else:
-            return "No cybersecurity news found!!",""
+            return "No cybersecurity news found!!", ""
     else:
-        return "Error fetching from API!!",""
+        return "Error fetching from API!!", ""
 
 # function to get news from second API
 def get_from_secondapi():
@@ -60,12 +60,13 @@ def get_from_secondapi():
         if news['articles']:
             title = news['articles'][0]['title']
             article_url = news['articles'][0]['url']
-            return title,article_url
+            return title, article_url
         else:
-            return "no news found!!",""
+            return "No news found!!", ""
     else:
-        return "error fetching from second API",""
+        return "Error fetching from second API", ""
 
+# Function to get news from Currents API
 def get_cyber_news_currents():
     # topics from this API
     topics = ['cybersecurity', 'cyber law', 'emerging threats', 'cloud security']
@@ -86,30 +87,28 @@ def get_cyber_news_currents():
     else:
         return "Error fetching from Currents API!", ""
 
-# function to select an API randomly
-api_choice = random.choice(['newsapi','secondapi'])
-
-if api_choice == 'newsapi':
-    return get_cyber_news_newsapi()
-elif api_choice == 'secondapi':
-    return get_from_secondapi()
-elif api_choice == 'currents':
-    return get_cyber_news_currents()
-else:
-    return "error selecting!!"
+# Function to select an API randomly and fetch news
+def get_cyber_news():
+    api_choice = random.choice(['newsapi', 'secondapi', 'currents'])
+    if api_choice == 'newsapi':
+        return get_cyber_news_newsapi()
+    elif api_choice == 'secondapi':
+        return get_from_secondapi()
+    elif api_choice == 'currents':
+        return get_cyber_news_currents()
+    else:
+        return "Error selecting!!", ""
 
 # function to tweet the news
 def tweet_news():
     """
-
-    fetches latest news and tweets it
-    
+    Fetches latest news and tweets it
     """
     news_title, news_url = get_cyber_news()
     if news_url:
         tweet = f"{news_title} - Read more here: {news_url}"
         api.update_status(tweet)
-        print("cybersecurity news tweeted:", tweet)
+        print("Cybersecurity news tweeted:", tweet)
     else:
         print("No news to tweet at this time.")
 
@@ -117,14 +116,12 @@ def tweet_news():
 def schedule_tweets():
     """
     Schedules the tweet_news function to run every hour using APScheduler.
-
     """
     scheduler = BlockingScheduler()
     scheduler.add_job(tweet_news, 'interval', hours=1)
-    print("Scheduler started,will tweet every hour..")
+    print("Scheduler started, will tweet every hour...")
     scheduler.start()
 
-# run the tweet scheduling..
+# run the tweet scheduling
 if __name__ == "__main__":
     schedule_tweets()
-
