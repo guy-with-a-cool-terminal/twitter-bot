@@ -26,8 +26,14 @@ api = tweepy.API(auth)
 
 # function to get cybersecurity news from API
 def get_cyber_news_newsapi():
-    url = f'https://newsapi.org/v2/everything?q=cybersecurity&apiKey={NEWS_API_KEY}'
+    # topics to be fetched from this API
+    topics = ['cybersecurity','databreach','malware','cyber attack']
+    selected_topic = random.choice(topics)
+
+    url = f'https://newsapi.org/v2/everything?q={selected_topic}&apiKey={NEWS_API_KEY}'
+
     response = requests.get(url)
+
     if response.status_code == 200:
         news = response.json()
         if news['articles']:
@@ -41,8 +47,14 @@ def get_cyber_news_newsapi():
 
 # function to get news from second API
 def get_from_secondapi():
-    url = f'https://gnews.io/api/v4/search?q=cybersecurity&token={GNEWS_API_KEY}'
+    # topics to be fetched from this API
+    topics = ['cybersecurity', 'privacy breach', 'phishing', 'internet security']
+    selected_topic = random.choice(topics)
+
+    url = f'https://gnews.io/api/v4/search?q={selected_topic}&token={GNEWS_API_KEY}'
+
     response = requests.get(url)
+
     if response.status_code == 200:
         news = response.json()
         if news['articles']:
@@ -55,8 +67,14 @@ def get_from_secondapi():
         return "error fetching from second API",""
 
 def get_cyber_news_currents():
-    url = f'https://api.currentsapi.services/v1/latest-news?apiKey={CURRENTS_API_KEY}&category=technology'
+    # topics from this API
+    topics = ['cybersecurity', 'cyber law', 'emerging threats', 'cloud security']
+    selected_topic = random.choice(topics)
+
+    url = f'https://api.currentsapi.services/v1/search?keywords={selected_topic}&apiKey={CURRENTS_API_KEY}'
+
     response = requests.get(url)
+
     if response.status_code == 200:
         news = response.json()
         if news['news']:
