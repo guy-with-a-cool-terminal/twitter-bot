@@ -11,12 +11,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # fetch API keys
-API_KEY = os.getenv('twitter key')
-API_SECRET_KEY = os.getenv('twitter secret key')
-ACCESS_TOKEN = os.getenv('twitter access key')
-ACCESS_TOKEN_SECRET = os.getenv('twitter access token key')
-NEWS_API_KEY = os.getenv('news api key')
-SE_API_KEY = os.getenv('software news key')
+API_KEY = os.getenv('twitter_key')
+API_SECRET_KEY = os.getenv('twitter_secret_key')
+ACCESS_TOKEN = os.getenv('twitter_access_key')
+ACCESS_TOKEN_SECRET = os.getenv('twitter_access_token_key')
+NEWS_API_KEY = os.getenv('news_api_key') 
+GNEWS_API_KEY = os.getenv('gnews_api_key') 
+CURRENTS_API_KEY = os.getenv('currents_api_key') 
 
 # authenticate with twitter
 auth = tweepy.OAuthHandler(API_KEY,API_SECRET_KEY)
@@ -40,7 +41,7 @@ def get_cyber_news_newsapi():
 
 # function to get news from second API
 def get_from_secondapi():
-    url = f'https://api.gdeltproject.org/api/v2/doc/doc?query=cybersecurity&mode=Artlist&format=json&KEY={GDELT_API_KEY}'
+    url = f'https://gnews.io/api/v4/search?q=cybersecurity&token={GNEWS_API_KEY}'
     response = requests.get(url)
     if response.status_code == 200:
         news = response.json()
@@ -53,6 +54,20 @@ def get_from_secondapi():
     else:
         return "error fetching from second API",""
 
+def get_cyber_news_currents():
+    url = f'https://api.currentsapi.services/v1/latest-news?apiKey={CURRENTS_API_KEY}&category=technology'
+    response = requests.get(url)
+    if response.status_code == 200:
+        news = response.json()
+        if news['news']:
+            title = news['news'][0]['title']
+            article_url = news['news'][0]['url']
+            return title, article_url
+        else:
+            return "No cybersecurity news found!", ""
+    else:
+        return "Error fetching from Currents API!", ""
+
 # function to select an API randomly
 api_choice = random.choice(['newsapi','secondapi'])
 
@@ -60,6 +75,8 @@ if api_choice == 'newsapi':
     return get_cyber_news_newsapi()
 elif api_choice == 'secondapi':
     return get_from_secondapi()
+elif api_choice == 'currents':
+    return get_cyber_news_currents()
 else:
     return "error selecting!!"
 
