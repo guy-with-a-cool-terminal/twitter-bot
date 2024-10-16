@@ -75,25 +75,25 @@ def get_from_secondapi():
         return f"GNews request error: {e}", ""
 
 # Function to get news from Currents API
-def get_cyber_news_currents():
-    topics = ['cybersecurity', 'cyber law', 'emerging threats', 'cloud security']
-    selected_topic = random.choice(topics)
-    url = f'https://api.currentsapi.services/v1/search?keywords={selected_topic}&language=en&apiKey={CURRENTS_API_KEY}'
+# def get_cyber_news_currents():
+#     topics = ['cybersecurity', 'cyber law', 'emerging threats', 'cloud security']
+#     selected_topic = random.choice(topics)
+#     url = f'https://api.currentsapi.services/v1/search?keywords={selected_topic}&language=en&apiKey={CURRENTS_API_KEY}'
     
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            news = response.json()
-            if news['articles']:
-                title = news['articles'][0]['title']
-                article_url = news['articles'][0]['url']
-                return title, article_url
-            else:
-                return "No news found!", ""
-        else:
-            return f"Error fetching from CurrentsAPI: {response.json().get('message')}", ""
-    except Exception as e:
-        return f"CurrentsAPI request error: {e}", ""
+#     try:
+#         response = requests.get(url)
+#         if response.status_code == 200:
+#             news = response.json()
+#             if news['articles']:
+#                 title = news['articles'][0]['title']
+#                 article_url = news['articles'][0]['url']
+#                 return title, article_url
+#             else:
+#                 return "No news found!", ""
+#         else:
+#             return f"Error fetching from CurrentsAPI: {response.json().get('message')}", ""
+#     except Exception as e:
+#         return f"CurrentsAPI request error: {e}", ""
 
 # Function to select an API randomly and fetch news
 def get_cyber_news():
