@@ -102,8 +102,6 @@ def get_cyber_news():
         return get_cyber_news_newsapi()
     elif api_choice == 'secondapi':
         return get_from_secondapi()
-    elif api_choice == 'currents':
-        return get_cyber_news_currents()
     else:
         return "Error selecting!", ""
 
