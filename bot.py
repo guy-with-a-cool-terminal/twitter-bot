@@ -4,6 +4,8 @@ import random
 from apscheduler.schedulers.blocking import BlockingScheduler
 from dotenv import load_dotenv
 from requests_oauthlib import OAuth1
+from urllib.parse import quote
+from datetime import datetime
 
 # Load the environment variables
 load_dotenv()
@@ -15,11 +17,10 @@ ACCESS_TOKEN = os.getenv('twitter_access_key')
 ACCESS_TOKEN_SECRET = os.getenv('twitter_access_secret_key')
 NEWS_API_KEY = os.getenv('news_api_key') 
 GNEWS_API_KEY = os.getenv('gnews_api_key') 
-CURRENTS_API_KEY = os.getenv('currents_api_key') 
 
 # Ensure all keys are available
 def check_env_keys():
-    keys = [API_KEY, API_SECRET_KEY, ACCESS_TOKEN, ACCESS_TOKEN_SECRET, NEWS_API_KEY, GNEWS_API_KEY, CURRENTS_API_KEY]
+    keys = [API_KEY, API_SECRET_KEY, ACCESS_TOKEN, ACCESS_TOKEN_SECRET, NEWS_API_KEY, GNEWS_API_KEY]
     if None in keys or '' in keys:
         raise EnvironmentError("Keys missing, check .env for clarity!")
 
@@ -31,21 +32,31 @@ def authenticate_twitter():
     except Exception as e:
         print(f'Error authenticating with Twitter: {e}')
         return None
+    
+# Set to keep track of previously tweeted news
+tweeted_news = set()
 
 # Function to get cybersecurity news from NewsAPI
 def get_cyber_news_newsapi():
-    topics = ['cybersecurity', 'databreach', 'malware', 'cyber attack']
-    selected_topic = random.choice(topics)
-    url = f'https://newsapi.org/v2/everything?q={selected_topic}&language=en&apiKey={NEWS_API_KEY}'
+    search_terms = ['cybersecurity', 'hacking', 'data breach', 'malware', 'cyber attack', 'information security', 'phishing']
+    selected_search_term = random.choice(search_terms)
+    print(f"Selected topic: {selected_search_term}")
+    url = f'https://newsapi.org/v2/everything?q={quote(selected_search_term)}&language=en&apiKey={NEWS_API_KEY}'
     
     try:
         response = requests.get(url)
+        # print("NewsAPI response:", response.json())  # Print full response for debugging
         if response.status_code == 200:
             news = response.json()
             if news['articles']:
-                title = news['articles'][0]['title']
-                article_url = news['articles'][0]['url']
-                return title, article_url
+                for article in news['articles']:
+                    title = article['title']
+                    article_url = article['url']
+                    # Ensure the article is not already tweeted
+                    if (title, article_url) not in tweeted_news:
+                        print(f"Adding to tweet: {title} - {article_url}")
+                        return title, article_url
+                return "No new news found!", ""
             else:
                 return "No news found!", ""
         else:
@@ -55,49 +66,36 @@ def get_cyber_news_newsapi():
 
 # Function to get news from GNews API
 def get_from_secondapi():
-    topics = ['cybersecurity', 'privacy breach', 'phishing', 'internet security']
-    selected_topic = random.choice(topics)
-    url = f'https://gnews.io/api/v4/search?q={selected_topic}&language=en&token={GNEWS_API_KEY}'
+    search_terms = ['cybersecurity', 'hacking', 'data breach', 'malware', 'cyber attack', 'information security', 'phishing']
+    selected_search_term = random.choice(search_terms)
+    print(f"Selected topic: {selected_search_term}")
+    
+    url = f'https://gnews.io/api/v4/search?q={quote(selected_search_term)}&language=en&token={GNEWS_API_KEY}'
 
     try:
         response = requests.get(url)
+        # print("GNewsAPI response:", response.json())  # Print full response for debugging
         if response.status_code == 200:
             news = response.json()
             if news['articles']:
-                title = news['articles'][0]['title']
-                article_url = news['articles'][0]['url']
-                return title, article_url
+                for article in news['articles']:
+                    title = article['title']
+                    article_url = article['url']
+                    # Ensure the article is not already tweeted
+                    if (title, article_url) not in tweeted_news:
+                        print(f"Adding to tweet: {title} - {article_url}")
+                        return title, article_url
+                return "No new news found!", ""
             else:
                 return "No news found!", ""
         else:
-            return f"Error fetching from GNews: {response.json().get('message')}", ""
+            return f"Error fetching from GNewsAPI: {response.json().get('message')}", ""
     except Exception as e:
-        return f"GNews request error: {e}", ""
+        return f"GNewsAPI request error: {e}", ""
 
-# Function to get news from Currents API
-# def get_cyber_news_currents():
-#     topics = ['cybersecurity', 'cyber law', 'emerging threats', 'cloud security']
-#     selected_topic = random.choice(topics)
-#     url = f'https://api.currentsapi.services/v1/search?keywords={selected_topic}&language=en&apiKey={CURRENTS_API_KEY}'
-    
-#     try:
-#         response = requests.get(url)
-#         if response.status_code == 200:
-#             news = response.json()
-#             if news['articles']:
-#                 title = news['articles'][0]['title']
-#                 article_url = news['articles'][0]['url']
-#                 return title, article_url
-#             else:
-#                 return "No news found!", ""
-#         else:
-#             return f"Error fetching from CurrentsAPI: {response.json().get('message')}", ""
-#     except Exception as e:
-#         return f"CurrentsAPI request error: {e}", ""
-
-# Function to select an API randomly and fetch news
 def get_cyber_news():
-    api_choice = random.choice(['newsapi', 'secondapi', 'currents'])
+    api_choice = random.choice(['newsapi', 'secondapi'])
+    print(f"Selected API: {api_choice}")  # Debug which API is selected
     if api_choice == 'newsapi':
         return get_cyber_news_newsapi()
     elif api_choice == 'secondapi':
@@ -123,6 +121,7 @@ def tweet_news(session, auth):
         
         if response.status_code == 201:
             print("Cybersecurity news tweeted:", tweet)
+            tweeted_news.add((news_title, news_url))
         else:
             print(f"Failed to tweet: {response.json().get('message')}")
     else:
@@ -132,8 +131,8 @@ def tweet_news(session, auth):
 def schedule_tweets(session, auth):
     tweet_news(session, auth)
     scheduler = BlockingScheduler()
-    scheduler.add_job(lambda: tweet_news(session, auth), 'interval', hours=1)
-    print("Scheduler started, will tweet every hour...")
+    scheduler.add_job(lambda: tweet_news(session, auth), 'interval', minutes=16)
+    print("Scheduler started, will tweet every 16 minutes...")
     scheduler.start()
 
 # Run the tweet scheduling
