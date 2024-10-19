@@ -31,7 +31,7 @@ def authenticate_twitter():
         return requests.Session(), auth
     except Exception as e:
         print(f'Error authenticating with Twitter: {e}')
-        return None
+        return None, None
 
 # Set to keep track of previously tweeted news
 tweeted_news = set()
@@ -40,20 +40,18 @@ tweeted_news = set()
 def fetch_news(api_url, query_params):
     try:
         response = requests.get(api_url, params=query_params)
-        if response.status_code == 200:
-            news = response.json()
-            if news['articles']:
-                for article in news['articles']:
-                    title = article['title']
-                    article_url = article['url']
-                    # Ensure the article is not already tweeted
-                    if (title, article_url) not in tweeted_news:
-                        print(f"Adding to tweet: {title} - {article_url}")
-                        return title, article_url, article
-            return "No new news found!", "", None
-        else:
-            return f"Error fetching news: {response.json().get('message')}", "", None
-    except Exception as e:
+        response.raise_for_status()  # Raises an error for 4xx and 5xx status codes
+        news = response.json()
+        if news['articles']:
+            for article in news['articles']:
+                title = article['title']
+                article_url = article['url']
+                # Ensure the article is not already tweeted
+                if (title, article_url) not in tweeted_news:
+                    print(f"Adding to tweet: {title} - {article_url}")
+                    return title, article_url, article
+        return "No new news found!", "", None
+    except requests.RequestException as e:
         return f"Request error: {e}", "", None
 
 # Function to get cybersecurity news from NewsAPI
@@ -72,6 +70,7 @@ def get_from_secondapi():
     query_params = {'q': selected_search_term, 'language': 'en', 'token': GNEWS_API_KEY}
     return fetch_news('https://gnews.io/api/v4/search', query_params)
 
+# Function to get news from a random API
 def get_cyber_news():
     api_choice = random.choice(['newsapi', 'secondapi'])
     print(f"Selected API: {api_choice}")
@@ -121,12 +120,12 @@ def tweet_news(session, auth):
     if news_url:
         # Fetch the news content from the API
         article_content = get_news_content(article)
-        
+
         # Split the article content into tweet-sized chunks
         tweets = split_content_into_tweets(article_content, max_words=500, max_tweet_length=280)
-        
-        # First tweet contains the news title and a summary of the article
-        tweet_text = f"{news_title} - {article_content[:250]}... \nRead more: {news_url}"  # Including a link in the main tweet
+
+        # First tweet contains the news title and a more detailed summary of the article
+        tweet_text = f"{news_title} - {article_content[:240]}... \nRead more: {news_url}"  # Including a link in the main tweet
         
         url = "https://api.twitter.com/2/tweets"
         
@@ -150,10 +149,10 @@ def tweet_news(session, auth):
                     print(f"Thread continued with: {tweet_part}")
                     previous_tweet_id = thread_response.json().get('data', {}).get('id')
                 else:
-                    print(f"Failed to post part of thread: {thread_response.json().get('message')}")
+                    print(f"Failed to post part of thread. Status Code: {thread_response.status_code}, Response: {thread_response.json()}")
                     return
 
-            # Optionally, you can add a final tweet summarizing or inviting discussion
+            # Optionally, add a final tweet summarizing or inviting discussion
             final_tweet = "What do you think about this news? Let's discuss!"
             final_response = session.post(
                 url,
@@ -165,12 +164,11 @@ def tweet_news(session, auth):
                 print(f"Final tweet posted for discussion: {final_tweet}")
                 tweeted_news.add((news_title, news_url))
             else:
-                print(f"Failed to post final tweet: {final_response.json().get('message')}")
+                print(f"Failed to post final tweet. Status Code: {final_response.status_code}, Response: {final_response.json()}")
         else:
-            print(f"Failed to tweet: {response.json().get('message')}")
+            print(f"Failed to tweet. Status Code: {response.status_code}, Response: {response.json()}")
     else:
         print("No news to tweet at this time.")
-
 
 # Scheduler to run the tweet function at regular intervals
 def schedule_tweets(session, auth):
@@ -184,5 +182,7 @@ def schedule_tweets(session, auth):
 if __name__ == "__main__":
     check_env_keys()
     session, auth = authenticate_twitter()
-    if session:
+    if session and auth:
         schedule_tweets(session, auth)
+    else:
+        print("Failed to establish session and authentication with Twitter.")
