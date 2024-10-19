@@ -53,11 +53,12 @@ def get_cyber_news_newsapi():
         news = response.json()
         if news['articles']:
             articles_summary = []
-            for article in news['articles']:
+            # Limit to 5 articles to avoid too many tweets
+            for article in news['articles'][:5]:  # Adjust the number as needed
                 title = article['title']
                 description = article.get('description', 'No description available.')
                 
-                # Limit to 280 characters and summarize
+                # Limit to 280 characters
                 summary = f"**{title}**: {description[:200]}..."  # Truncate to fit within character limit
                 if summary not in tweeted_news:
                     articles_summary.append(summary)
@@ -83,11 +84,12 @@ def get_from_secondapi():
         news = response.json()
         if news['articles']:
             articles_summary = []
-            for article in news['articles']:
+            # Limit to 5 articles to avoid too many tweets
+            for article in news['articles'][:5]:  # Adjust the number as needed
                 title = article['title']
                 description = article.get('description', 'No description available.')
                 
-                # Limit to 280 characters and summarize
+                # Limit to 280 characters
                 summary = f"**{title}**: {description[:200]}..."  # Truncate to fit within character limit
                 if summary not in tweeted_news:
                     articles_summary.append(summary)
