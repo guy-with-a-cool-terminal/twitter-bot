@@ -6,6 +6,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from dotenv import load_dotenv
 from requests_oauthlib import OAuth1
 from urllib.parse import quote
+import time
 
 # Load the environment variables
 load_dotenv()
@@ -122,14 +123,27 @@ def create_tweet_thread(session, auth, tweets):
         
         # Post subsequent tweets in the thread
         for tweet in tweets[1:]:
+            if len(tweet) > 280:
+                logging.error(f"Tweet exceeds character limit: {tweet}")
+                continue  # Skip tweets that are too long
+            
+            time.sleep(10)  # Add a 10-second delay between tweets in the thread
+
             response = session.post(url, auth=auth, json={"text": tweet, "reply": {"in_reply_to_tweet_id": tweet_id}})
             if response.status_code == 201:
                 logging.info("Thread tweet posted: %s", tweet)
                 tweet_id = response.json()['data']['id']  # Update tweet_id for the next reply
+            elif response.status_code == 429:
+                logging.error(f"Rate limit hit! Waiting before retrying: {response.json()}")
+                time.sleep(900)  # Sleep for 15 minutes before retrying if rate limit is hit
             else:
-                logging.error(f"Failed to post thread tweet: {response.json().get('message')}")
+                logging.error(f"Failed to post thread tweet: {response.json()} - Status Code: {response.status_code}")
+    elif response.status_code == 429:
+        logging.error(f"Rate limit hit! Waiting before retrying: {response.json()}")
+        time.sleep(900)  # Sleep for 15 minutes before retrying if rate limit is hit
     else:
-        logging.error(f"Failed to tweet: {response.json().get('message')}")
+        logging.error(f"Failed to tweet: {response.json()} - Status Code: {response.status_code}")
+
 
 # Function to tweet the news
 def tweet_news(session, auth):
