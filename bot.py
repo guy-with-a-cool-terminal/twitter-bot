@@ -160,7 +160,7 @@ def tweet_news(session, auth):
 def schedule_tweets(session, auth):
     tweet_news(session, auth)
     scheduler = BlockingScheduler()
-    scheduler.add_job(lambda: tweet_news(session, auth), 'interval', minutes=16)
+    scheduler.add_job(lambda: tweet_news(session, auth), 'interval', hours=2)
     logging.info("Scheduler started, will tweet every 16 minutes...")
     scheduler.start()
 
