@@ -124,3 +124,5 @@ if __name__ == "__main__":
             schedule_tweets(session, auth)
     except Exception as e:
         logging.error(f"An error occurred: {e}")
+        
+        # merged
