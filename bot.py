@@ -6,6 +6,8 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from dotenv import load_dotenv
 from requests_oauthlib import OAuth1
 from urllib.parse import quote
+import time
+from cachetools import TTLCache
 
 # Load the environment variables
 load_dotenv()
@@ -39,6 +41,9 @@ def authenticate_twitter():
 # Set to keep track of previously tweeted news
 tweeted_news = set()
 
+# Create a cache for news articles with a TTL of 1 hour
+news_cache = TTLCache(maxsize=100, ttl=3600)
+
 # Function to get news from NewsAPI
 def get_cyber_news_newsapi():
     search_terms = ['cybersecurity', 'hacking', 'data breach', 'malware', 'cyber attack', 'information security', 'phishing']
@@ -47,28 +52,43 @@ def get_cyber_news_newsapi():
 
     url = f'https://newsapi.org/v2/everything?q={quote(selected_search_term)}&language=en&apiKey={NEWS_API_KEY}'
 
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an error for bad responses
-        news = response.json()
-        if news['articles']:
-            articles_summary = []
-            # Limit to 5 articles to avoid too many tweets
-            for article in news['articles'][:5]:  # Adjust the number as needed
-                title = article['title']
-                description = article.get('description', 'No description available.')
-                
-                # Limit to 280 characters
-                summary = f"**{title}**: {description[:200]}..."  # Truncate to fit within character limit
-                if summary not in tweeted_news:
-                    articles_summary.append(summary)
-                    tweeted_news.add(summary)  # Track tweeted summaries
+    # Exponential backoff variables
+    retries = 0
+    max_retries = 5
 
-            return articles_summary
-        return ["No new news found!"]
-    except requests.exceptions.RequestException as e:
-        logging.error(f"NewsAPI request error: {e}")
-        return ["Error fetching news!"]
+    while retries < max_retries:
+        try:
+            response = requests.get(url)
+            response.raise_for_status()  # Raise an error for bad responses
+            news = response.json()
+            articles_summary = []
+
+            if news['articles']:
+                for article in news['articles'][:3]:  # Only take the first three articles
+                    title = article['title']
+                    description = article.get('description', 'No description available.')
+
+                    # Limit to 280 characters and summarize
+                    summary = f"**{title}**: {description[:200]}..."  # Truncate to fit within character limit
+                    if summary not in tweeted_news:
+                        articles_summary.append(summary)
+                        tweeted_news.add(summary)  # Track tweeted summaries
+                        # Cache the remaining articles
+                        news_cache[summary] = news['articles'][3:]  # Cache the rest for future use
+
+                return articles_summary
+            return ["No new news found!"]
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 429:
+                wait_time = 2 ** retries  # Exponential backoff
+                logging.error(f"Rate limit hit! Waiting {wait_time} seconds before retrying.")
+                time.sleep(wait_time)
+                retries += 1
+                continue
+            else:
+                logging.error(f"NewsAPI request error: {e}")
+                return ["Error fetching news!"]
+    return ["Max retries reached. Please try again later."]
 
 # Function to get news from GNews API
 def get_from_secondapi():
@@ -78,28 +98,43 @@ def get_from_secondapi():
 
     url = f'https://gnews.io/api/v4/search?q={quote(selected_search_term)}&language=en&token={GNEWS_API_KEY}'
 
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an error for bad responses
-        news = response.json()
-        if news['articles']:
-            articles_summary = []
-            # Limit to 5 articles to avoid too many tweets
-            for article in news['articles'][:5]:  # Adjust the number as needed
-                title = article['title']
-                description = article.get('description', 'No description available.')
-                
-                # Limit to 280 characters
-                summary = f"**{title}**: {description[:200]}..."  # Truncate to fit within character limit
-                if summary not in tweeted_news:
-                    articles_summary.append(summary)
-                    tweeted_news.add(summary)  # Track tweeted summaries
+    # Exponential backoff variables
+    retries = 0
+    max_retries = 5
 
-            return articles_summary
-        return ["No new news found!"]
-    except requests.exceptions.RequestException as e:
-        logging.error(f"GNewsAPI request error: {e}")
-        return ["Error fetching news!"]
+    while retries < max_retries:
+        try:
+            response = requests.get(url)
+            response.raise_for_status()  # Raise an error for bad responses
+            news = response.json()
+            articles_summary = []
+
+            if news['articles']:
+                for article in news['articles'][:3]:  # Only take the first three articles
+                    title = article['title']
+                    description = article.get('description', 'No description available.')
+
+                    # Limit to 280 characters and summarize
+                    summary = f"**{title}**: {description[:200]}..."  # Truncate to fit within character limit
+                    if summary not in tweeted_news:
+                        articles_summary.append(summary)
+                        tweeted_news.add(summary)  # Track tweeted summaries
+                        # Cache the remaining articles
+                        news_cache[summary] = news['articles'][3:]  # Cache the rest for future use
+
+                return articles_summary
+            return ["No new news found!"]
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 429:
+                wait_time = 2 ** retries  # Exponential backoff
+                logging.error(f"Rate limit hit! Waiting {wait_time} seconds before retrying.")
+                time.sleep(wait_time)
+                retries += 1
+                continue
+            else:
+                logging.error(f"GNewsAPI request error: {e}")
+                return ["Error fetching news!"]
+    return ["Max retries reached. Please try again later."]
 
 def get_cyber_news():
     api_choice = random.choice(['newsapi', 'secondapi'])
@@ -124,14 +159,35 @@ def create_tweet_thread(session, auth, tweets):
         
         # Post subsequent tweets in the thread
         for tweet in tweets[1:]:
+            if len(tweet) > 280:
+                logging.error(f"Tweet exceeds character limit: {tweet}")
+                continue  # Skip tweets that are too long
+            
+            time.sleep(10)  # Add a 10-second delay between tweets in the thread
+
             response = session.post(url, auth=auth, json={"text": tweet, "reply": {"in_reply_to_tweet_id": tweet_id}})
+            
+            # Check rate limit and handle status 429
             if response.status_code == 201:
                 logging.info("Thread tweet posted: %s", tweet)
                 tweet_id = response.json()['data']['id']  # Update tweet_id for the next reply
+            elif response.status_code == 429:
+                # Log the rate limit and sleep for the reset time
+                rate_limit_reset = int(response.headers.get("x-rate-limit-reset", 900))  # 15 minutes fallback
+                wait_time = max(rate_limit_reset - time.time(), 15 * 60)  # Wait until the reset time or 15 minutes
+                logging.error(f"Rate limit hit! Waiting {wait_time / 60} minutes before retrying.")
+                time.sleep(wait_time)
             else:
-                logging.error(f"Failed to post thread tweet: {response.json().get('message')}")
+                logging.error(f"Failed to post thread tweet: {response.json()} - Status Code: {response.status_code}")
+    elif response.status_code == 429:
+        # Log and wait if the first tweet hits rate limit
+        rate_limit_reset = int(response.headers.get("x-rate-limit-reset", 900))  # 15 minutes fallback
+        wait_time = max(rate_limit_reset - time.time(), 15 * 60)  # Wait until the reset time or 15 minutes
+        logging.error(f"Rate limit hit! Waiting {wait_time / 60} minutes before retrying.")
+        time.sleep(wait_time)
     else:
-        logging.error(f"Failed to tweet: {response.json().get('message')}")
+        logging.error(f"Failed to tweet: {response.json()} - Status Code: {response.status_code}")
+
 
 # Function to tweet the news
 def tweet_news(session, auth):
@@ -148,13 +204,13 @@ def tweet_news(session, auth):
 def schedule_tweets(session, auth):
     tweet_news(session, auth)
     scheduler = BlockingScheduler()
-    scheduler.add_job(lambda: tweet_news(session, auth), 'interval', minutes=16)
-    logging.info("Scheduler started, will tweet every 16 minutes...")
+    scheduler.add_job(lambda: tweet_news(session, auth), 'interval', hours=4)  # Change to every 4 hours
     scheduler.start()
 
-# Run the tweet scheduling
 if __name__ == "__main__":
     check_env_keys()
     session, auth = authenticate_twitter()
-    if session:
+    if session and auth:
         schedule_tweets(session, auth)
+    else:
+        logging.error("Twitter session could not be authenticated.")
