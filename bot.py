@@ -19,8 +19,8 @@ API_KEY = os.getenv('twitter_key')
 API_SECRET_KEY = os.getenv('twitter_secret_key')
 ACCESS_TOKEN = os.getenv('twitter_access_key')
 ACCESS_TOKEN_SECRET = os.getenv('twitter_access_secret_key')
-NEWS_API_KEY = os.getenv('news_api_key') 
-GNEWS_API_KEY = os.getenv('gnews_api_key') 
+NEWS_API_KEY = os.getenv('news_api_key')
+GNEWS_API_KEY = os.getenv('gnews_api_key')
 
 # Ensure all keys are available
 def check_env_keys():
@@ -32,7 +32,9 @@ def check_env_keys():
 def authenticate_twitter():
     try:
         auth = OAuth1(API_KEY, API_SECRET_KEY, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-        return requests.Session(), auth
+        session = requests.Session()
+        logging.info("Authenticated successfully with Twitter!")
+        return session, auth
     except Exception as e:
         logging.error(f'Error authenticating with Twitter: {e}')
         return None
@@ -52,12 +54,13 @@ def get_cyber_news_newsapi():
         response = requests.get(url)
         response.raise_for_status()  # Raise an error for bad responses
         news = response.json()
+        articles_summary = []
+
         if news['articles']:
-            articles_summary = []
-            for article in news['articles']:
+            for article in news['articles'][:10]:  # Only take the first ten articles
                 title = article['title']
                 description = article.get('description', 'No description available.')
-                
+
                 # Limit to 280 characters and summarize
                 summary = f"**{title}**: {description[:200]}..."  # Truncate to fit within character limit
                 if summary not in tweeted_news:
@@ -66,51 +69,11 @@ def get_cyber_news_newsapi():
 
             return articles_summary
         return ["No new news found!"]
-    except requests.exceptions.RequestException as e:
+    except requests.exceptions.HTTPError as e:
         logging.error(f"NewsAPI request error: {e}")
         return ["Error fetching news!"]
 
-# Function to get news from GNews API
-def get_from_secondapi():
-    search_terms = ['cybersecurity', 'hacking', 'data breach', 'malware', 'cyber attack', 'information security', 'phishing']
-    selected_search_term = random.choice(search_terms)
-    logging.info(f"Selected topic: {selected_search_term}")
-
-    url = f'https://gnews.io/api/v4/search?q={quote(selected_search_term)}&language=en&token={GNEWS_API_KEY}'
-
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an error for bad responses
-        news = response.json()
-        if news['articles']:
-            articles_summary = []
-            for article in news['articles']:
-                title = article['title']
-                description = article.get('description', 'No description available.')
-                
-                # Limit to 280 characters and summarize
-                summary = f"**{title}**: {description[:200]}..."  # Truncate to fit within character limit
-                if summary not in tweeted_news:
-                    articles_summary.append(summary)
-                    tweeted_news.add(summary)  # Track tweeted summaries
-
-            return articles_summary
-        return ["No new news found!"]
-    except requests.exceptions.RequestException as e:
-        logging.error(f"GNewsAPI request error: {e}")
-        return ["Error fetching news!"]
-
-def get_cyber_news():
-    api_choice = random.choice(['newsapi', 'secondapi'])
-    logging.info(f"Selected API: {api_choice}")  # Debug which API is selected
-    if api_choice == 'newsapi':
-        return get_cyber_news_newsapi()
-    elif api_choice == 'secondapi':
-        return get_from_secondapi()
-    else:
-        return ["Error selecting!"]
-
-# Function to create a thread of tweets
+# Function to create a thread of tweets with a delay
 def create_tweet_thread(session, auth, tweets):
     url = "https://api.twitter.com/2/tweets"
     
@@ -121,33 +84,21 @@ def create_tweet_thread(session, auth, tweets):
         logging.info("First tweet posted: %s", tweets[0])
         tweet_id = response.json()['data']['id']  # Get the ID of the first tweet
         
-        # Post subsequent tweets in the thread
+        # Post subsequent tweets in the thread with a delay
         for tweet in tweets[1:]:
-            if len(tweet) > 280:
-                logging.error(f"Tweet exceeds character limit: {tweet}")
-                continue  # Skip tweets that are too long
-            
-            time.sleep(10)  # Add a 10-second delay between tweets in the thread
-
             response = session.post(url, auth=auth, json={"text": tweet, "reply": {"in_reply_to_tweet_id": tweet_id}})
+            
             if response.status_code == 201:
                 logging.info("Thread tweet posted: %s", tweet)
                 tweet_id = response.json()['data']['id']  # Update tweet_id for the next reply
-            elif response.status_code == 429:
-                logging.error(f"Rate limit hit! Waiting before retrying: {response.json()}")
-                time.sleep(900)  # Sleep for 15 minutes before retrying if rate limit is hit
             else:
-                logging.error(f"Failed to post thread tweet: {response.json()} - Status Code: {response.status_code}")
-    elif response.status_code == 429:
-        logging.error(f"Rate limit hit! Waiting before retrying: {response.json()}")
-        time.sleep(900)  # Sleep for 15 minutes before retrying if rate limit is hit
+                logging.error(f"Failed to post thread tweet: {response.json().get('message')}")
     else:
-        logging.error(f"Failed to tweet: {response.json()} - Status Code: {response.status_code}")
-
+        logging.error(f"Failed to tweet: {response.json().get('message')}")
 
 # Function to tweet the news
 def tweet_news(session, auth):
-    articles_summary = get_cyber_news()
+    articles_summary = get_cyber_news_newsapi()
     logging.info(f"Fetched news summaries: {articles_summary}")
 
     if articles_summary:
@@ -160,13 +111,16 @@ def tweet_news(session, auth):
 def schedule_tweets(session, auth):
     tweet_news(session, auth)
     scheduler = BlockingScheduler()
-    scheduler.add_job(lambda: tweet_news(session, auth), 'interval', hours=2)
+    scheduler.add_job(lambda: tweet_news(session, auth), 'interval', minutes=16)
     logging.info("Scheduler started, will tweet every 16 minutes...")
     scheduler.start()
 
 # Run the tweet scheduling
 if __name__ == "__main__":
-    check_env_keys()
-    session, auth = authenticate_twitter()
-    if session:
-        schedule_tweets(session, auth)
+    try:
+        check_env_keys()  # Check environment keys
+        session, auth = authenticate_twitter()
+        if session:
+            schedule_tweets(session, auth)
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")

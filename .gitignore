@@ -25,6 +25,7 @@ Thumbs.db
 .vscode/
 .idea/
  nltk_data/
+ tweeted_news.txt
 
 # Ignore any other custom directories or files
 
